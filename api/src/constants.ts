@@ -6,15 +6,10 @@ export enum Environment {
 }
 
 export enum ApiTagsEnum {
-  Auth = 'auth',
-  CloudStorage = 'cloud-storage',
-  Notification = 'notification',
-  Example = 'example',
+  Merchant = 'merchant',
 }
 
 export const ApiDescriptions: Record<ApiTagsEnum, string> = {
-  example: 'Example generation',
-  auth: 'Authentication',
-  'cloud-storage': 'Cloud Storage',
-  notification: 'Notification',
+  [ApiTagsEnum.Merchant]:
+    'Endpoints for merchants to create and manage payment links',
 };

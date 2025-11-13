@@ -6,8 +6,8 @@ import { AppConfig } from './config/app.config';
 import { HealthModule } from './health/health.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CoreServicesModule } from './core-services/core-services.module';
-import { ExampleModule } from './example-module/example.module';
 import { ValidationModule } from './core-services/validation/validation.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -39,7 +39,7 @@ import { ValidationModule } from './core-services/validation/validation.module';
     ValidationModule,
     HealthModule,
     CoreServicesModule,
-    ExampleModule,
+    PaymentModule,
   ],
   providers: [AppConfig],
 })

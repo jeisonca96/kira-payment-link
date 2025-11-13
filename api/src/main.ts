@@ -40,14 +40,6 @@ async function bootstrap() {
         target: false,
         value: false,
       },
-      exceptionFactory: (errors) => {
-        const result = errors.map((error) => ({
-          property: error.property,
-          value: error.value,
-          constraints: error.constraints,
-        }));
-        return new Error(`Validation failed: ${JSON.stringify(result)}`);
-      },
     }),
   );
 
