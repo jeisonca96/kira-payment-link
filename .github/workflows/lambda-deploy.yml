@@ -96,6 +96,8 @@ jobs:
     name: Deploy to AWS Lambda
     needs: build
     runs-on: ubuntu-latest
+    env:
+      S3_BUCKET: kira-payment-link-lambda-deployments
 
     steps:
       - name: Download Lambda package
@@ -110,11 +112,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Upload to S3
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          S3_KEY="lambda-packages/${LAMBDA_FUNCTION_NAME}-${TIMESTAMP}.zip"
+
+          echo "Uploading to s3://${S3_BUCKET}/${S3_KEY}"
+          aws s3 cp lambda.zip "s3://${S3_BUCKET}/${S3_KEY}"
+
+          echo "s3_key=${S3_KEY}" >> $GITHUB_ENV
+          echo "✅ Package uploaded to S3"
+
       - name: Deploy to Lambda
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-            --zip-file fileb://lambda.zip
+            --s3-bucket ${{ env.S3_BUCKET }} \
+            --s3-key ${{ env.s3_key }}
 
           echo "✅ Lambda function updated successfully!"
 
