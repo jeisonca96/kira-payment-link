@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - fix/deploy
   workflow_dispatch:
 
 env:
@@ -137,8 +138,7 @@ jobs:
               REDIS_DB=${{ secrets.REDIS_DB }},
               JWT_SECRET=${{ secrets.JWT_SECRET }},
               JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }},
-              AWS_REGION=${{ env.AWS_REGION }},
-              CORS_ORIGINS=${{ secrets.CORS_ORIGINS }},
+              CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
             }"
 
           echo "✅ Environment variables updated!"
