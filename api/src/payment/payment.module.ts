@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { MerchantController } from './controllers/merchant.controller';
 import { CheckoutController } from './controllers/checkout.controller';
+import { WebhookController } from './controllers/webhook.controller';
 import { PaymentService } from './services/payment.service';
 import { FeeCalculatorService } from './services/fee-calculator.service';
 import { FxRateService } from './services/fx-rate.service';
@@ -10,6 +11,7 @@ import { CacheService } from './services/cache.service';
 import { FeeProfileService } from './services/fee-profile.service';
 import { TransactionService } from './services/transaction.service';
 import { LedgerService } from './services/ledger.service';
+import { WebhookService } from './services/webhook.service';
 import { PspOrchestratorService } from './services/psp-orchestrator.service';
 import { StripeMockService } from './services/gateways/stripe-mock.service';
 import { AdyenMockService } from './services/gateways/adyen-mock.service';
@@ -30,7 +32,7 @@ import { PercentageFeeRule } from './services/fee-engine/rules/percentage-fee.ru
       { name: Transaction.name, schema: TransactionSchema },
     ]),
   ],
-  controllers: [MerchantController, CheckoutController],
+  controllers: [MerchantController, CheckoutController, WebhookController],
   providers: [
     PaymentService,
     FeeCalculatorService,
@@ -39,6 +41,7 @@ import { PercentageFeeRule } from './services/fee-engine/rules/percentage-fee.ru
     FeeProfileService,
     TransactionService,
     LedgerService,
+    WebhookService,
     PspOrchestratorService,
     StripeMockService,
     AdyenMockService,

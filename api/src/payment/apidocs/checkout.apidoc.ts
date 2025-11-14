@@ -9,7 +9,6 @@ import {
   ApiServiceUnavailableResponse,
   ApiHeader,
   ApiExtraModels,
-  getSchemaPath,
 } from '@nestjs/swagger';
 import { QuoteResponseDto } from '../dtos/quote-response.dto';
 import { GetQuoteDto } from '../dtos/get-quote.dto';
@@ -110,6 +109,15 @@ Executes the payment using the PSP Orchestrator with automatic failover:
    - 5% random failure rate (better reliability)
    - Provides redundancy for high availability
 
+**Payment Flow (Webhook-Driven):**
+1. Payment request is submitted to PSP
+2. Transaction is created with status **PROCESSING**
+3. Response 200 OK is returned immediately
+4. PSP processes payment asynchronously
+5. PSP sends webhook to update transaction status
+6. Webhook updates transaction to **PAID** or **FAILED**
+7. Payment link status is updated accordingly
+
 **ACID Transaction Guarantees:**
 - Uses MongoDB multi-document transactions
 - Atomically creates Transaction record AND updates PaymentLink status
@@ -129,7 +137,7 @@ Executes the payment using the PSP Orchestrator with automatic failover:
 **Error Codes:**
 - \`IDEMPOTENCY_KEY_MISSING\`: Missing required Idempotency-Key header
 - \`PAYMENT_LINK_NOT_FOUND\`: Payment link does not exist or invalid ID
-- \`PAYMENT_LINK_NOT_ACTIVE\`: Payment link is not in ACTIVE status
+- \`PAYMENT_LINK_NOT_ACTIVE\`: Payment link is not in ACTIVE status (PROCESSING, PAID, EXPIRED, or CANCELLED)
 - \`CARD_DECLINED\`: Card was declined by the issuing bank
 - \`PSP_GATEWAY_ERROR\`: Payment gateway returned an error
 - \`PSP_NETWORK_ERROR\`: Network error communicating with PSP
@@ -155,12 +163,13 @@ Executes the payment using the PSP Orchestrator with automatic failover:
     }),
     ApiResponse({
       status: 200,
-      description: 'Payment processed successfully',
+      description:
+        'Payment submitted successfully (status: PROCESSING, awaiting webhook confirmation)',
       type: TransactionResponseDto,
     }),
     ApiBadRequestResponse({
       description:
-        'Bad Request - Invalid input, missing idempotency key, payment link not active, card declined, gateway error, or payment processing failed',
+        'Bad Request - Invalid input, missing idempotency key, payment link not active, payment already processing, card declined, gateway error, or payment processing failed',
       type: ApiErrorResponseDto,
       examples: {
         idempotencyKeyMissing: {

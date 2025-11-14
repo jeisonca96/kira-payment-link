@@ -5,6 +5,7 @@ export type PaymentLinkDocument = PaymentLink & Document;
 
 export enum PaymentLinkStatus {
   ACTIVE = 'ACTIVE',
+  PROCESSING = 'PROCESSING',
   PAID = 'PAID',
   EXPIRED = 'EXPIRED',
   CANCELLED = 'CANCELLED',

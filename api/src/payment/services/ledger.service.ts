@@ -108,20 +108,23 @@ export class LedgerService {
 
       const savedTransaction = await transaction.save({ session });
 
-      if (pspResponse.success && pspResponse.status === 'COMPLETED') {
+      if (savedTransaction.status === TransactionStatus.PROCESSING) {
         await this.paymentLinkModel
           .findByIdAndUpdate(
             data.paymentLinkId,
             {
-              status: PaymentLinkStatus.PAID,
-              paidAt: new Date(),
+              status: PaymentLinkStatus.PROCESSING,
             },
             { session },
           )
           .exec();
 
         this.logger.log(
-          `[ACID] Payment link ${data.paymentLinkId} marked as PAID`,
+          `[ACID] Payment link ${data.paymentLinkId} marked as PROCESSING`,
+        );
+      } else {
+        this.logger.log(
+          `[ACID] Payment link ${data.paymentLinkId} remains ACTIVE due to transaction status: ${savedTransaction.status}`,
         );
       }
 
@@ -172,16 +175,19 @@ export class LedgerService {
 
       const savedTransaction = await transaction.save();
 
-      if (pspResponse.success && pspResponse.status === 'COMPLETED') {
+      if (savedTransaction.status === TransactionStatus.PROCESSING) {
         await this.paymentLinkModel
           .findByIdAndUpdate(data.paymentLinkId, {
-            status: PaymentLinkStatus.PAID,
-            paidAt: new Date(),
+            status: PaymentLinkStatus.PROCESSING,
           })
           .exec();
 
         this.logger.log(
-          `[NO-ACID] Payment link ${data.paymentLinkId} marked as PAID`,
+          `[NO-ACID] Payment link ${data.paymentLinkId} marked as PROCESSING`,
+        );
+      } else {
+        this.logger.log(
+          `[NO-ACID] Payment link ${data.paymentLinkId} remains ACTIVE due to transaction status: ${savedTransaction.status}`,
         );
       }
 
@@ -204,7 +210,6 @@ export class LedgerService {
       const admin = this.connection.db.admin();
       const serverInfo = await admin.serverStatus();
 
-      // Check if running as replica set
       const isReplicaSet = serverInfo.repl && serverInfo.repl.setName;
 
       return !!isReplicaSet;
@@ -352,7 +357,7 @@ export class LedgerService {
   ): TransactionStatus {
     switch (pspStatus) {
       case 'COMPLETED':
-        return TransactionStatus.PAID;
+        return TransactionStatus.PROCESSING;
       case 'PENDING':
         return TransactionStatus.PENDING;
       case 'FAILED':

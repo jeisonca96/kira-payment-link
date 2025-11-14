@@ -28,6 +28,14 @@ export class StripeMockService implements IPaymentGateway {
     const delay = 100 + Math.random() * 400; // 100-500ms
     await this.sleep(delay);
 
+    // Random failure (50% chance)
+    if (Math.random() < 0.5) {
+      throw new PspNetworkException(
+        'STRIPE',
+        'Service temporarily unavailable',
+      );
+    }
+
     // Simulate different scenarios based on token
     if (request.token === 'tok_visa_success') {
       return this.successResponse(request);
@@ -39,14 +47,6 @@ export class StripeMockService implements IPaymentGateway {
 
     if (request.token === 'tok_network_error') {
       throw new PspNetworkException('STRIPE', 'Connection timeout');
-    }
-
-    // Random failure (50% chance)
-    if (Math.random() < 0.5) {
-      throw new PspNetworkException(
-        'STRIPE',
-        'Service temporarily unavailable',
-      );
     }
 
     return this.successResponse(request);

@@ -8,6 +8,7 @@ export enum Environment {
 export enum ApiTagsEnum {
   Merchant = 'merchant',
   Checkout = 'checkout',
+  Webhooks = 'webhooks',
 }
 
 export const ApiDescriptions: Record<ApiTagsEnum, string> = {
@@ -15,4 +16,6 @@ export const ApiDescriptions: Record<ApiTagsEnum, string> = {
     'Endpoints for merchants to create and manage payment links',
   [ApiTagsEnum.Checkout]:
     'Endpoints for payers to get quotes and process payments',
+  [ApiTagsEnum.Webhooks]:
+    'Endpoints for PSP webhooks to update transaction status',
 };

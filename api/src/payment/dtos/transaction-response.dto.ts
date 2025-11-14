@@ -9,7 +9,7 @@ export class TransactionResponseDto {
 
   @ApiProperty({
     description: 'Transaction status',
-    example: 'COMPLETED',
+    example: 'PROCESSING',
     enum: ['PENDING', 'PROCESSING', 'PAID', 'FAILED', 'CANCELLED'],
   })
   status: string;
