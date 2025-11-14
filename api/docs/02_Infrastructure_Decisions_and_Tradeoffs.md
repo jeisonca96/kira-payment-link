@@ -484,71 +484,65 @@ resource "aws_lambda_function" "api" {
 
 ---
 
-### 4.2 AWS Secrets Manager: Never Hardcode Secrets
+### 4.2 GitHub Secrets: Never Hardcode Secrets
 
-**Decision:** Store ALL sensitive credentials in **AWS Secrets Manager** (not environment variables in plaintext).
+**Decision:** Store ALL sensitive credentials in **GitHub Repository Secrets** and inject them during deployment (not environment variables in plaintext or committed to git).
 
 **Secrets Managed:**
 
 1. `DATABASES_MONGO_URL` - MongoDB Atlas connection string
 2. `REDIS_URL` - Upstash Redis connection URL
-3. `STRIPE_SECRET_KEY` - Stripe API key
-4. `MERCADOPAGO_ACCESS_TOKEN` - Adyen credentials
-5. `JWT_SECRET` - JWT signing key
-6. `WEBHOOK_SIGNING_SECRET` - PSP webhook validation
+3. `JWT_SECRET` - JWT signing key
 
 **Access Pattern:**
 
 ```typescript
 // Never do this ❌
-const mongoUri = process.env.MONGO_URI;
+const mongoUri = "mongodb://hardcoded-connection-string";
 
 // Always do this ✅
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-
-async function getMongoUri(): Promise<string> {
-  const client = new SecretsManagerClient({ region: 'us-east-1' });
-  const response = await client.send(
-    new GetSecretValueCommand({ SecretId: 'prod/mongo/uri' })
-  );
-  return response.SecretString;
-}
+const mongoUri = process.env.DATABASES_MONGO_URL;
 ```
 
 **Why This Matters:**
 
-| Risk | Without Secrets Manager | With Secrets Manager |
+| Risk | Without GitHub Secrets | With GitHub Secrets |
 |------|------------------------|----------------------|
-| **Credential Leakage** | Secrets in git history, logs, error traces | Encrypted at rest and in transit |
-| **Rotation** | Manual process, requires redeployment | Automatic rotation supported |
-| **Audit Trail** | No record of who accessed secrets | CloudTrail logs all access |
-| **Access Control** | Anyone with code has secrets | IAM-based granular access |
+| **Credential Leakage** | Secrets in git history, logs, error traces | Encrypted at rest, never exposed in code |
+| **Rotation** | Manual search/replace in codebase | Update secret in GitHub, redeploy |
+| **Audit Trail** | No record of who accessed secrets | GitHub audit logs for secret access |
+| **Access Control** | Anyone with code has secrets | Repository permissions control access |
 
-**Cost:** $0.40/secret/month + $0.05/10,000 API calls = ~$2-3/month for 5 secrets (negligible vs. breach cost).
+**Cost:** Free (included with GitHub repositories).
 
 **Deployment Integration (GitHub Actions):**
 
 ```yaml
 # .github/workflows/lambda-deploy.yml
-- name: Update Environment Variables
+- name: Deploy to AWS Lambda
+  env:
+    DATABASES_MONGO_URL: ${{ secrets.DATABASES_MONGO_URL }}
+    REDIS_URL: ${{ secrets.REDIS_URL }}
+    JWT_SECRET: ${{ secrets.JWT_SECRET }}
+    STRIPE_SECRET: ${{ secrets.STRIPE_SECRET }}
   run: |
-    aws lambda update-function-configuration \
-      --function-name kira-payment-link-api-prod \
-      --environment "Variables={
-        NODE_ENV=production,
-        MONGO_URI=${{ secrets.DATABASES_MONGO_URL }},
-        REDIS_URL=${{ secrets.REDIS_URL }},
-        STRIPE_KEY=${{ secrets.STRIPE_SECRET }}
-      }"
+    # Serverless Framework injects these as Lambda environment variables
+    serverless deploy --stage production
 ```
 
-**GitHub Secrets → AWS Secrets Manager Workflow:**
-1. Sensitive values stored in GitHub repository secrets
-2. GitHub Actions reads from encrypted secrets during deployment
-3. Values injected into Lambda environment variables (encrypted by AWS)
+**GitHub Secrets → Lambda Environment Variables Workflow:**
+1. Sensitive values stored in GitHub repository secrets (encrypted at rest)
+2. GitHub Actions reads from encrypted secrets during deployment workflow
+3. Serverless Framework injects values into Lambda environment variables (encrypted by AWS)
 4. Application code reads from `process.env` at runtime
 
-**Conclusion:** Secrets Manager is non-negotiable for production systems. The $2-3/month cost is insurance against catastrophic credential leakage.
+**Why Not AWS Secrets Manager?**
+- **Simplicity:** For MVP, GitHub Secrets + Lambda environment variables provide sufficient security
+- **Cost:** Free vs. $0.40/secret/month + API call costs
+- **Speed:** Faster iteration without additional AWS service configuration
+- **Future Migration:** Can migrate to AWS Secrets Manager when rotation automation or runtime secret updates are needed
+
+**Conclusion:** GitHub Secrets provide production-grade security for the MVP without additional infrastructure complexity. The zero-cost solution is sufficient for credential protection and deployment automation.
 
 ---
 
@@ -637,13 +631,13 @@ async processPayment(linkId: string, paymentToken: string) {
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    FRONTEND (Vercel)                        │
-│  Next.js + React + Stripe.js (Client-Side Tokenization)    │
+│                   Next.js + React                           │
 └──────────────────────┬──────────────────────────────────────┘
                        │ HTTPS
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              AWS API Gateway (HTTP API)                     │
-│  $1/million requests · CORS · JWT auth                      │
+│               $1/million requests · CORS                    │
 └──────────────────────┬──────────────────────────────────────┘
                        │
                        ▼
@@ -661,18 +655,17 @@ async processPayment(linkId: string, paymentToken: string) {
 │  │  │ Service  │  │          │  │ Check         │   │    │
 │  │  └──────────┘  └──────────┘  └───────────────┘   │    │
 │  └────────────────────────────────────────────────────┘    │
-└───────┬──────────────────┬──────────────────┬──────────────┘
-        │                  │                  │
-        │ ACID             │ <1ms Cache       │ HTTPS
-        │ Transactions     │                  │
-        ▼                  ▼                  ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
-│   MongoDB    │  │   Upstash    │  │  Stripe/Mercado  │
-│   Atlas      │  │   Redis      │  │  Pago PSPs       │
-│              │  │              │  │                  │
-│ Free tier    │  │ Free tier    │  │ Pay-per-txn      │
-│ 512MB        │  │ 10K cmds/day │  │                  │
-└──────────────┘  └──────────────┘  └──────────────────┘
+└───────┬──────────────────┬────────────────────────────────┘
+        │                  │                  
+        │ ACID             │ <1ms Cache      
+        │ Transactions     │                  
+        ▼                  ▼                 
+┌──────────────┐  ┌──────────────┐  
+│   MongoDB    │  │   Upstash    │  
+│              │  │              │  
+│ Free tier    │  │ Free tier    │  
+│ 512MB        │  │ 10K cmds/day │  
+└──────────────┘  └──────────────┘  
 ```
 
 ### Cost Breakdown (First 6 Months)
