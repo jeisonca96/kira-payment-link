@@ -78,14 +78,18 @@ jobs:
           npm ci --production
 
       - name: Create deployment package
-        working-directory: ./api/dist
-        run: zip -r lambda.zip .
+        working-directory: ./api
+        run: |
+          cd dist
+          cp -r ../node_modules .
+          zip -r lambda.zip .
+          mv lambda.zip ..
 
       - name: Upload Lambda package
         uses: actions/upload-artifact@v4
         with:
           name: lambda-package
-          path: api/dist/lambda.zip
+          path: api/lambda.zip
           retention-days: 1
 
   deploy:
