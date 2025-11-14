@@ -55,6 +55,7 @@
     "mongoose": "^8.9.6",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",
     "validator": "^13.15.15"
   },
