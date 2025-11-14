@@ -279,6 +279,20 @@ export class LedgerService {
         this.logger.log(
           `[ACID] Payment link ${transaction.paymentLinkId} marked as PAID`,
         );
+      } else if (data.status === TransactionStatus.FAILED) {
+        await this.paymentLinkModel
+          .findByIdAndUpdate(
+            transaction.paymentLinkId,
+            {
+              status: PaymentLinkStatus.ACTIVE,
+            },
+            { session },
+          )
+          .exec();
+
+        this.logger.log(
+          `[ACID] Payment link ${transaction.paymentLinkId} reverted to ACTIVE after webhook failure`,
+        );
       }
 
       await session.commitTransaction();
@@ -335,6 +349,16 @@ export class LedgerService {
 
         this.logger.log(
           `[NO-ACID] Payment link ${transaction.paymentLinkId} marked as PAID`,
+        );
+      } else if (data.status === TransactionStatus.FAILED) {
+        await this.paymentLinkModel
+          .findByIdAndUpdate(transaction.paymentLinkId, {
+            status: PaymentLinkStatus.ACTIVE,
+          })
+          .exec();
+
+        this.logger.log(
+          `[NO-ACID] Payment link ${transaction.paymentLinkId} reverted to ACTIVE after webhook failure`,
         );
       }
 
