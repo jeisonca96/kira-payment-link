@@ -10,27 +10,13 @@ This document describes the enhanced security and validation features implemente
 - **X-Frame-Options**: Prevents clickjacking attacks
 - **X-Content-Type-Options**: Prevents MIME type sniffing
 
-### 2. Rate Limiting
-The application implements multiple layers of rate limiting:
-
-#### Express Rate Limiting
-- **Window**: 15 minutes (configurable via `RATE_LIMIT_WINDOW`)
-- **Max Requests**: 100 per window (configurable via `RATE_LIMIT_MAX`)
-- **Response**: Returns 429 status with structured error message
-
-#### NestJS Throttler
-Multiple throttling configurations:
-- **Short**: 3 requests per second
-- **Medium**: 20 requests per 10 seconds  
-- **Long**: 100 requests per minute
-
-### 3. CORS Configuration
+### 2. CORS Configuration
 - **Origins**: Configurable via `CORS_ORIGINS` environment variable
 - **Methods**: GET, HEAD, PUT, PATCH, POST, DELETE
 - **Headers**: Content-Type, Authorization
 - **Credentials**: Enabled for authentication
 
-### 4. Enhanced Validation Pipeline
+### 3. Enhanced Validation Pipeline
 - **Whitelist**: Only allows properties defined in DTOs
 - **Transform**: Automatically transforms input data
 - **Forbid Non-Whitelisted**: Rejects unknown properties
@@ -206,8 +192,6 @@ Kubernetes-compatible readiness check ensuring:
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
 | `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `*` | `http://localhost:3000,https://app.example.com` |
-| `RATE_LIMIT_WINDOW` | Rate limit window in milliseconds | `900000` | `900000` (15 minutes) |
-| `RATE_LIMIT_MAX` | Maximum requests per window | `100` | `100` |
 | `BODY_LIMIT` | Maximum request body size | `2mb` | `10mb` |
 
 ### Security Headers
@@ -255,21 +239,6 @@ export class CreateUserDto {
 }
 ```
 
-### Applying Rate Limiting to Specific Routes
-
-```typescript
-import { Throttle } from '@nestjs/throttler';
-
-@Controller('api')
-export class ApiController {
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @Post('sensitive-endpoint')
-  async sensitiveOperation() {
-    // This endpoint allows only 5 requests per minute
-  }
-}
-```
-
 ### Custom Health Checks
 
 ```typescript
@@ -290,20 +259,11 @@ async checkExternalAPI() {
 1. **Always validate input**: Use DTOs with validation decorators
 2. **Sanitize user data**: Apply sanitization decorators to prevent XSS
 3. **Use HTTPS in production**: Configure proper SSL certificates
-4. **Monitor rate limits**: Set appropriate limits based on your use case
-5. **Regular security audits**: Run `npm audit` regularly
-6. **Environment variables**: Never commit sensitive data to version control
-7. **Health monitoring**: Use health checks for monitoring and alerting
+4. **Regular security audits**: Run `npm audit` regularly
+5. **Environment variables**: Never commit sensitive data to version control
+6. **Health monitoring**: Use health checks for monitoring and alerting
 
 ## 🧪 Testing Security Features
-
-### Testing Rate Limiting
-```bash
-# Test rate limiting
-for i in {1..101}; do
-  curl -X GET http://localhost:3000/health
-done
-```
 
 ### Testing Validation
 ```bash

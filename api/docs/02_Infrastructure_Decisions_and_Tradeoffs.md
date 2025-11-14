@@ -536,12 +536,6 @@ const mongoUri = process.env.DATABASES_MONGO_URL;
 3. Serverless Framework injects values into Lambda environment variables (encrypted by AWS)
 4. Application code reads from `process.env` at runtime
 
-**Why Not AWS Secrets Manager?**
-- **Simplicity:** For MVP, GitHub Secrets + Lambda environment variables provide sufficient security
-- **Cost:** Free vs. $0.40/secret/month + API call costs
-- **Speed:** Faster iteration without additional AWS service configuration
-- **Future Migration:** Can migrate to AWS Secrets Manager when rotation automation or runtime secret updates are needed
-
 **Conclusion:** GitHub Secrets provide production-grade security for the MVP without additional infrastructure complexity. The zero-cost solution is sufficient for credential protection and deployment automation.
 
 ---
@@ -676,10 +670,9 @@ async processPayment(linkId: string, paymentToken: string) {
 | **API Gateway** | $0 (free tier) | $0.50 | $5 |
 | **MongoDB Atlas** | $0 (free tier) | $0 (free tier) | $0 (512MB) |
 | **Upstash Redis** | $0 (free tier) | $0 (free tier) | $0 (10K/day) |
-| **Secrets Manager** | $2 | $2 | $2 |
 | **CloudWatch Logs** | $1 | $2 | $5 |
 | **S3 (deployments)** | $0.10 | $0.10 | $0.10 |
-| **TOTAL** | **$3.10** | **$4.60** | **$22.10** |
+| **TOTAL** | **$1.10** | **$2.60** | **$20.10** |
 
 **Equivalent Traditional Architecture Cost:** $100-150/month (EC2, RDS, ElastiCache, NAT Gateway)
 
@@ -693,9 +686,9 @@ async processPayment(linkId: string, paymentToken: string) {
 
 1. ✅ **Financial Integrity:** ACID transactions eliminate ledger inconsistency risk
 2. ✅ **Development Velocity:** NestJS monolith + MongoDB = ship in 24 hours
-3. ✅ **Cost Efficiency:** Serverless architecture = $3-20/month vs. $100+ for traditional
+3. ✅ **Cost Efficiency:** Serverless architecture = $1-20/month vs. $100+ for traditional
 4. ✅ **Operational Simplicity:** Managed services = zero server management
-5. ✅ **Production Readiness:** Terraform + Secrets Manager + HTTPS = enterprise-grade
+5. ✅ **Production Readiness:** GitHub Secrets + HTTPS + Lambda encryption = enterprise-grade security
 
 ### What We Deliberately Traded Away:
 

@@ -71,9 +71,178 @@ This document outlines the product and technical strategy for the Kira Payment L
 
 ---
 
-## Section 2: Technical Strategy and Risk Mitigation
+## Section 2: Business Logic Design Patterns
 
-### 2.1 Biggest Technical Risk: Financial Data Consistency (Ledger Integrity)
+### 2.1 Core Patterns for Payment Processing
+
+The system implements strategic design patterns that directly support business requirements: financial integrity, PSP resilience, and fee calculation flexibility.
+
+---
+
+#### **Strategy Pattern: PSP Gateway Orchestration**
+
+**Business Need:** Support multiple Payment Service Providers (Stripe, Adyen) with automatic failover for revenue protection.
+
+**Implementation:**
+
+```typescript
+// Common interface for all PSPs
+interface IPaymentGateway {
+  charge(request: PspChargeRequest): Promise<PspChargeResponse>;
+  getName(): string;
+}
+
+// Concrete implementations
+class StripeMockService implements IPaymentGateway { ... }
+class AdyenMockService implements IPaymentGateway { ... }
+
+// Orchestrator uses Strategy Pattern for runtime PSP selection
+class PspOrchestratorService {
+  constructor(
+    private primaryGateway: IPaymentGateway,
+    private secondaryGateway: IPaymentGateway
+  ) {}
+  
+  async executeCharge(request: PaymentRequest) {
+    try {
+      return await this.primaryGateway.charge(request);
+    } catch (primaryError) {
+      // Automatic failover to secondary PSP
+      return await this.secondaryGateway.charge(request);
+    }
+  }
+}
+```
+
+**Business Value:**
+- ✅ **Revenue Protection:** System continues processing payments if primary PSP fails
+- ✅ **Vendor Independence:** Add/remove PSPs without modifying core orchestration logic
+- ✅ **A/B Testing:** Easy to route specific transactions to different PSPs
+
+---
+
+#### **Chain of Responsibility: Fee Calculation Engine**
+
+**Business Need:** Flexible fee structure supporting fixed fees, percentage fees, and FX markup with per-merchant customization.
+
+**Implementation:**
+
+```typescript
+interface IFeeRule {
+  apply(context: FeeContext): FeeRuleResult;
+}
+
+// Individual fee rules
+class FixedFeeRule implements IFeeRule { ... }      // $0.30 processing fee
+class PercentageFeeRule implements IFeeRule { ... } // 3.5% transaction fee
+class FxMarkupRule implements IFeeRule { ... }      // 2% FX conversion markup
+
+// Fee calculator applies rules sequentially
+class FeeCalculatorService {
+  async calculateFees(context: FeeContext): Promise<FeeCalculationResult> {
+    const rules = await this.buildRulesChain(context.profileId);
+    
+    let totalFee = 0;
+    const feesDetail: FeesDetail[] = [];
+
+    // Chain: Each rule processes context and adds to total
+    for (const rule of rules) {
+      const result = rule.apply(context);
+      totalFee += result.amount;
+      feesDetail.push({
+        type: rule.type,
+        amount: result.amount,
+        description: result.description
+      });
+    }
+
+    return { totalFee, feesDetail };
+  }
+}
+```
+
+**Business Value:**
+- ✅ **Configurable Pricing:** Enable/disable fee rules per merchant without code changes
+- ✅ **Transparent Breakdown:** Each rule generates line item in fee breakdown for customer clarity
+- ✅ **Easy Extension:** Add new fee types (e.g., premium fees, discounts) by creating new rule classes
+
+---
+
+#### **Unit of Work Pattern: Financial Data Integrity**
+
+**Business Need:** Guarantee atomicity of payment operations—Transaction record and PaymentLink status must update together or not at all.
+
+**Implementation:**
+
+```typescript
+@Injectable()
+export class LedgerService {
+  async recordTransaction(data: CreateTransactionData): Promise<Transaction> {
+    const session = await this.connection.startSession();
+    session.startTransaction();
+
+    try {
+      // Operation 1: Create transaction record
+      const transaction = await this.transactionModel.create([data], { session });
+
+      // Operation 2: Update payment link status to 'paid'
+      await this.paymentLinkModel.findByIdAndUpdate(
+        data.paymentLinkId,
+        { status: 'paid', paidAt: new Date() },
+        { session }
+      );
+
+      // Both operations succeed → commit
+      await session.commitTransaction();
+      return transaction[0];
+
+    } catch (error) {
+      // Any operation fails → rollback everything
+      await session.abortTransaction();
+      throw error;
+
+    } finally {
+      session.endSession();
+    }
+  }
+}
+```
+
+**Business Value:**
+- ✅ **Zero Financial Inconsistencies:** Impossible to have paid transaction without updated link status (or vice versa)
+- ✅ **Audit Compliance:** Every payment state change is atomic and traceable
+- ✅ **Dispute Protection:** Single source of truth prevents "I paid but link shows unpaid" scenarios
+
+---
+
+### 2.2 Why These Patterns for a 24-Hour MVP?
+
+**Conscious Trade-offs:**
+
+✅ **Patterns We Implemented:**
+- **Strategy + Chain of Responsibility** → Required for fee flexibility and PSP failover (core business logic)
+- **Unit of Work** → Non-negotiable for financial integrity
+- **Adapter** → Necessary to normalize heterogeneous PSP responses
+
+❌ **Patterns We Deliberately Excluded:**
+- **Event Sourcing** → Overkill for MVP; adds complexity without immediate business value
+- **CQRS (Command Query Responsibility Segregation)** → Not needed at current scale
+- **Circuit Breaker** → Nice-to-have resilience feature, can add post-MVP
+
+**Justification:**
+
+The patterns implemented directly map to business requirements:
+1. **Revenue Protection** → Strategy Pattern for PSP failover
+2. **Flexible Pricing** → Chain of Responsibility for fee rules
+3. **Financial Integrity** → Unit of Work for ACID transactions
+
+These are *foundational* patterns for a payment system, not premature optimization.
+
+---
+
+## Section 3: Technical Strategy and Risk Mitigation
+
+### 3.1 Biggest Technical Risk: Financial Data Consistency (Ledger Integrity)
 
 **Risk Statement:** The absolute, non-negotiable technical risk is **ledger integrity**. Any inconsistency between Payment Link status, Transaction records, and PSP state creates financial liability, reconciliation nightmares, and customer disputes.
 
@@ -86,16 +255,26 @@ While MongoDB is not a traditional relational database, the risk is **fully miti
 - **Idempotency Keys:** Prevent duplicate transaction recording on retry scenarios
 - **Schema Validation:** Enforce data integrity at the database level for critical financial fields
 
-**Code Enforcement:**
+**Code Enforcement (Unit of Work Pattern):**
 ```typescript
-// Every financial operation follows this pattern:
+// LedgerService implementa Unit of Work para operaciones atómicas
 const session = await connection.startSession();
 session.startTransaction();
 try {
-  await linkRepository.updateStatus(linkId, 'paid', { session });
-  await transactionRepository.create(transactionData, { session });
+  // Operación 1: Registrar transacción
+  await transactionModel.create([transactionData], { session });
+  
+  // Operación 2: Actualizar estado del link
+  await paymentLinkModel.findByIdAndUpdate(
+    linkId, 
+    { status: 'paid', paidAt: new Date() }, 
+    { session }
+  );
+  
+  // Commit solo si ambas operaciones tienen éxito
   await session.commitTransaction();
 } catch (error) {
+  // Rollback automático si alguna falla
   await session.abortTransaction();
   throw error;
 } finally {
@@ -105,11 +284,13 @@ try {
 
 **Outcome:** Zero tolerance for data inconsistency. Every payment state transition is atomic, traceable, and recoverable.
 
+**Patrón aplicado:** **Unit of Work** + **Repository Pattern** garantizan integridad financiera.
+
 ---
 
-### 2.2 Fee Modeling (Configurability vs. Complexity)
+### 3.2 Fee Modeling (Configurability vs. Complexity)
 
-**Strategic Decision:** Decouple fee calculation logic from core checkout flow using the Strategy Pattern (Rule Engine).
+**Strategic Decision:** Decouple fee calculation logic from core checkout flow using **Strategy Pattern + Chain of Responsibility**.
 
 **Architecture Benefits:**
 
@@ -129,6 +310,39 @@ try {
    - Fee engine handles all calculation logic
    - Easy to unit test fee scenarios independently
 
+**Implementación con Patrones:**
+
+```typescript
+// Strategy Pattern: Cada regla implementa IFeeRule
+interface IFeeRule {
+  apply(context: FeeContext): FeeRuleResult;
+}
+
+// Chain of Responsibility: FeeCalculator aplica reglas secuencialmente
+class FeeCalculatorService {
+  private rules: IFeeRule[];
+
+  async calculateFees(context: FeeContext) {
+    const rules = [
+      new FixedFeeRule(),      // $0.30
+      new PercentageFeeRule(), // 3.5%
+      new FxMarkupRule()       // 2% FX
+    ];
+
+    let totalFee = 0;
+    const breakdown = [];
+
+    for (const rule of rules) {
+      const result = rule.apply(context);
+      totalFee += result.amount;
+      breakdown.push(result);
+    }
+
+    return { totalFee, breakdown };
+  }
+}
+```
+
 **MVP Implementation:**
 - Configuration-driven fee calculation with default rules
 - Full fee breakdown in transaction response (Base Amount, Fee, FX Markup, Total)
@@ -136,24 +350,72 @@ try {
 
 **Trade-off:** More upfront complexity for long-term flexibility. This is the correct trade-off for a payment platform that will scale across multiple merchants with varying business models.
 
+**Patrones aplicados:** **Strategy**, **Chain of Responsibility**, **Factory** (para crear reglas desde config)
+
 ---
 
-### 2.3 PSP Abstraction Layer
+### 3.3 PSP Abstraction Layer
 
-**Technical Strategy:** Implement adapter pattern for PSP integration to enable seamless switching and testing.
+**Technical Strategy:** Implement **Strategy Pattern + Adapter Pattern** for PSP integration to enable seamless switching and testing.
+
+**Architecture:**
+
+```typescript
+// 1. Strategy Interface (contrato común)
+interface IPaymentGateway {
+  charge(request: PspChargeRequest): Promise<PspChargeResponse>;
+  getName(): string;
+}
+
+// 2. Adapter Pattern (normaliza respuestas de PSPs)
+class StripeMockService implements IPaymentGateway {
+  async charge(request: PspChargeRequest): Promise<PspChargeResponse> {
+    const stripeResponse = await this.stripeClient.charges.create({...});
+    
+    // Adapter: Convierte formato Stripe a formato estándar
+    return {
+      success: stripeResponse.status === 'succeeded',
+      reference: stripeResponse.id,
+      status: this.mapStripeStatus(stripeResponse.status),
+      rawResponse: stripeResponse
+    };
+  }
+}
+
+// 3. Orchestrator usa Strategy Pattern para failover
+class PspOrchestratorService {
+  constructor(
+    private primaryGateway: IPaymentGateway,
+    private secondaryGateway: IPaymentGateway
+  ) {}
+
+  async executeCharge(request: PaymentRequest) {
+    try {
+      // Intenta con primary (Stripe)
+      return await this.primaryGateway.charge(request);
+    } catch (primaryError) {
+      // Failover a secondary (Adyen)
+      return await this.secondaryGateway.charge(request);
+    }
+  }
+}
+```
 
 **Benefits:**
 - **Testability:** Mock PSP responses for comprehensive test coverage
 - **Flexibility:** Add new PSPs without modifying core payment logic
 - **Resilience:** Standardized error handling across all PSPs
+- **Normalization:** Heterogeneous PSP responses converted to common format
 
 **MVP Scope:** Basic abstraction with Stripe and Adyen adapters, standardized response mapping.
 
+**Patrones aplicados:** **Strategy**, **Adapter**, **Dependency Injection**
+
 ---
 
-## Section 3: MVP Scope and Trade-offs (The 24-Hour Plan)
+## Section 4: MVP Scope and Trade-offs (The 24-Hour Plan)
 
-### 3.1 MUST INCLUDE (The Core)
+### 4.1 MUST INCLUDE (The Core)
 
 These features are **non-negotiable** for MVP validation:
 
@@ -202,7 +464,7 @@ These features are **non-negotiable** for MVP validation:
 
 ---
 
-### 3.2 DELIBERATE CUTS (What Was Excluded to Meet Deadline)
+### 4.2 DELIBERATE CUTS (What Was Excluded to Meet Deadline)
 
 These features are **explicitly excluded** from the 24-hour MVP. This is not technical debt—it's strategic focus.
 
@@ -273,7 +535,7 @@ These features are **explicitly excluded** from the 24-hour MVP. This is not tec
 
 ---
 
-### 3.3 MVP Success Criteria
+### 4.3 MVP Success Criteria
 
 **The MVP is successful if:**
 
