@@ -15,7 +15,6 @@ const serverlessExpress = require('@codegenie/serverless-express');
 import { json } from 'express';
 const express = require('express');
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import { Environment } from './constants';
 
 let cachedServer: Handler;
@@ -29,8 +28,8 @@ async function bootstrapServer(): Promise<Handler> {
     const adapter = new ExpressAdapter(expressApp);
 
     const app = await NestFactory.create(AppModule, adapter, {
-      logger: ['error', 'warn', 'log'],
-      bufferLogs: true,
+      logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+      bufferLogs: false, // Disable buffering for immediate CloudWatch logging
     });
 
     const appConfig = app.get(AppConfig);
@@ -102,24 +101,6 @@ function configureApp(
     );
   }
 
-  // Rate limiting - Lambda compatible
-  const limiter = rateLimit({
-    windowMs: appConfig.rateLimitWindow,
-    max: appConfig.rateLimitMax,
-    message: {
-      message: 'Too many requests, please try again later.',
-      code: 'TOO_MANY_REQUESTS',
-      details: 'Too many requests from this IP, please try again later.',
-      statusCode: 429,
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-    // Use a store compatible with Lambda (in-memory for single instance)
-    skipFailedRequests: false,
-    skipSuccessfulRequests: false,
-  });
-  app.use(limiter);
-
   // CORS configuration
   app.enableCors({
     origin: appConfig.corsOrigins,
@@ -131,10 +112,15 @@ function configureApp(
   logger.log('Setting custom limit for JSON body parser', { limit });
   app.use(json({ limit }));
 
-  // Swagger documentation
-  const { config, route } = BuildApiDocs(appConfig.baseUrl);
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup(route, app, document);
+  // Swagger documentation - disabled in Lambda to reduce package size and cold start
+  if (process.env.ENABLE_SWAGGER === 'true') {
+    logger.log('Enabling Swagger documentation...');
+    const { config, route } = BuildApiDocs(appConfig.baseUrl);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup(route, app, document);
+  } else {
+    logger.log('Swagger documentation disabled in Lambda');
+  }
 }
 
 export const handler: Handler = async (
@@ -142,9 +128,21 @@ export const handler: Handler = async (
   context: Context,
   callback: Callback,
 ) => {
+  const logger = new Logger('LambdaHandler');
+
   // AWS Lambda context reuse optimization
   context.callbackWaitsForEmptyEventLoop = false;
 
+  // Log incoming request
+  logger.log(
+    `Incoming request: ${event.requestContext?.http?.method || event.httpMethod} ${event.requestContext?.http?.path || event.path}`,
+  );
+  logger.debug(`Request ID: ${context.awsRequestId}`);
+
   const server = await bootstrapServer();
-  return server(event, context, callback);
+  const response = await server(event, context, callback);
+
+  logger.log(`Response status: ${response?.statusCode || 'unknown'}`);
+
+  return response;
 };

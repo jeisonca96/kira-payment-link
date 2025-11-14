@@ -14,11 +14,16 @@ export class CacheService implements OnModuleDestroy {
   ) {
     this.logger = this.customLoggerService.createLogger(CacheService.name);
 
+    const redisHost = this.configService.get<string>('REDIS_HOST', 'localhost');
+    const isUpstash = redisHost.includes('upstash.io');
+
     this.redis = new Redis({
-      host: this.configService.get<string>('REDIS_HOST', 'localhost'),
+      host: redisHost,
       port: this.configService.get<number>('REDIS_PORT', 6379),
       password: this.configService.get<string>('REDIS_PASSWORD'),
       db: this.configService.get<number>('REDIS_DB', 0),
+      // Enable TLS for Upstash
+      tls: isUpstash ? {} : undefined,
       retryStrategy: (times: number) => {
         const delay = Math.min(times * 50, 2000);
         return delay;

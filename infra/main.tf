@@ -12,6 +12,33 @@ provider "aws" {
   region = var.aws_region
 }
 
+# S3 Bucket for Lambda Deployment Packages
+resource "aws_s3_bucket" "lambda_deployments" {
+  bucket = "${var.project_name}-lambda-deployments"
+}
+
+resource "aws_s3_bucket_versioning" "lambda_deployments" {
+  bucket = aws_s3_bucket.lambda_deployments.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "lambda_deployments" {
+  bucket = aws_s3_bucket.lambda_deployments.id
+
+  rule {
+    id     = "delete-old-versions"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
+
 # Lambda Function
 resource "aws_lambda_function" "api" {
   filename         = "${path.module}/../api/dist/lambda.zip"
@@ -43,6 +70,24 @@ resource "aws_iam_role" "lambda" {
 resource "aws_iam_role_policy_attachment" "lambda_basic" {
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# IAM Policy for Lambda to access S3 (for code updates)
+resource "aws_iam_role_policy" "lambda_s3" {
+  name = "${var.project_name}-lambda-s3-${var.environment}"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ]
+      Resource = "${aws_s3_bucket.lambda_deployments.arn}/*"
+    }]
+  })
 }
 
 # API Gateway

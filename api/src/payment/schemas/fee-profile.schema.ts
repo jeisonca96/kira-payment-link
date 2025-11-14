@@ -82,7 +82,6 @@ export class FeeProfile {
   @Prop({
     required: true,
     unique: true,
-    index: true,
     type: String,
     maxlength: 100,
   })
@@ -106,5 +105,3 @@ export class FeeProfile {
 }
 
 export const FeeProfileSchema = SchemaFactory.createForClass(FeeProfile);
-
-FeeProfileSchema.index({ profileId: 1 }, { unique: true });

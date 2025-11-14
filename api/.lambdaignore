@@ -1,0 +1,39 @@
+# Development dependencies
+node_modules/typescript
+node_modules/serverless
+node_modules/serverless-*
+node_modules/@typescript-eslint
+node_modules/eslint
+node_modules/prettier
+node_modules/jest
+node_modules/@nestjs/cli
+node_modules/@nestjs/schematics
+node_modules/@nestjs/testing
+node_modules/webpack
+node_modules/@babel
+node_modules/@esbuild
+
+# Test files
+node_modules/**/__tests__
+node_modules/**/test
+node_modules/**/tests
+node_modules/**/*.spec.js
+node_modules/**/*.test.js
+
+# Documentation
+node_modules/**/docs
+node_modules/**/examples
+node_modules/**/*.md
+node_modules/**/*.markdown
+
+# Source maps and TypeScript
+node_modules/**/*.map
+node_modules/**/*.ts
+!node_modules/**/*.d.ts
+
+# Build tools
+node_modules/java-invoke-local
+
+# Unused dependencies (check if really unused)
+node_modules/googleapis
+node_modules/google-auth-library

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - fix/deploy
   workflow_dispatch:
 
 env:
@@ -74,23 +75,62 @@ jobs:
         working-directory: ./api
         run: |
           rm -rf node_modules
-          npm ci --production
+          npm ci --production --omit=dev
+
+          # Remove unused heavy dependencies
+          rm -rf node_modules/googleapis
+          rm -rf node_modules/google-auth-library
+          rm -rf node_modules/java-invoke-local
+          rm -rf node_modules/swagger-ui-dist
+
+      - name: Prune unnecessary files
+        working-directory: ./api
+        run: |
+          # Remove test files
+          find node_modules -type d \( -name "test" -o -name "tests" -o -name "__tests__" -o -name "coverage" \) -exec rm -rf {} + 2>/dev/null || true
+
+          # Remove documentation
+          find node_modules -type d \( -name "docs" -o -name "examples" -o -name ".github" \) -exec rm -rf {} + 2>/dev/null || true
+
+          # Remove source files
+          find node_modules -name "*.md" -delete 2>/dev/null || true
+          find node_modules -name "*.ts" ! -name "*.d.ts" -delete 2>/dev/null || true
+          find node_modules -name "*.map" -delete 2>/dev/null || true
+          find node_modules -name "LICENSE*" -delete 2>/dev/null || true
+          find node_modules -name "CHANGELOG*" -delete 2>/dev/null || true
 
       - name: Create deployment package
-        working-directory: ./api/dist
-        run: zip -r lambda.zip .
+        working-directory: ./api
+        run: |
+          cd dist
+          cp -r ../node_modules .
+
+          # Show size before zipping
+          echo "Package size before compression:"
+          du -sh .
+
+          # Create optimized zip
+          zip -r9 lambda.zip . -x "*.git*"
+
+          # Show final size
+          echo "Final ZIP size:"
+          ls -lh lambda.zip
+
+          mv lambda.zip ..
 
       - name: Upload Lambda package
         uses: actions/upload-artifact@v4
         with:
           name: lambda-package
-          path: api/dist/lambda.zip
+          path: api/lambda.zip
           retention-days: 1
 
   deploy:
     name: Deploy to AWS Lambda
     needs: build
     runs-on: ubuntu-latest
+    env:
+      S3_BUCKET: kira-payment-link-lambda-deployments
 
     steps:
       - name: Download Lambda package
@@ -105,11 +145,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Upload to S3
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          S3_KEY="lambda-packages/${LAMBDA_FUNCTION_NAME}-${TIMESTAMP}.zip"
+
+          echo "Uploading to s3://${S3_BUCKET}/${S3_KEY}"
+          aws s3 cp lambda.zip "s3://${S3_BUCKET}/${S3_KEY}"
+
+          echo "s3_key=${S3_KEY}" >> $GITHUB_ENV
+          echo "✅ Package uploaded to S3"
+
       - name: Deploy to Lambda
         run: |
           aws lambda update-function-code \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-            --zip-file fileb://lambda.zip
+            --s3-bucket ${{ env.S3_BUCKET }} \
+            --s3-key ${{ env.s3_key }}
 
           echo "✅ Lambda function updated successfully!"
 
@@ -127,7 +179,7 @@ jobs:
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --environment "Variables={
               NODE_ENV=production,
-              PORT=3000,
+              API_PORT=3000,
               API_BASE_URL=${{ secrets.API_BASE_URL }},
               CHECKOUT_BASE_URL=${{ secrets.CHECKOUT_BASE_URL }},
               DATABASES_MONGO_URL=${{ secrets.DATABASES_MONGO_URL }},
@@ -137,8 +189,7 @@ jobs:
               REDIS_DB=${{ secrets.REDIS_DB }},
               JWT_SECRET=${{ secrets.JWT_SECRET }},
               JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }},
-              AWS_REGION=${{ env.AWS_REGION }},
-              CORS_ORIGINS=${{ secrets.CORS_ORIGINS }},
+              CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
             }"
 
           echo "✅ Environment variables updated!"
@@ -197,9 +248,9 @@ jobs:
         run: |
           sleep 5
           API_URL="${{ steps.get-url.outputs.api_url }}"
-          echo "Testing: $API_URL/health"
+          echo "Testing: $API_URL/v1/health"
 
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health")
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/v1/health")
 
           if [ "$RESPONSE" = "200" ]; then
             echo "✅ Health endpoint OK (HTTP $RESPONSE)"
