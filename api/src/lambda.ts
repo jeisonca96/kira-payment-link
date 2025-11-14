@@ -28,8 +28,8 @@ async function bootstrapServer(): Promise<Handler> {
     const adapter = new ExpressAdapter(expressApp);
 
     const app = await NestFactory.create(AppModule, adapter, {
-      logger: ['error', 'warn', 'log'],
-      bufferLogs: true,
+      logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+      bufferLogs: false, // Disable buffering for immediate CloudWatch logging
     });
 
     const appConfig = app.get(AppConfig);
@@ -128,9 +128,19 @@ export const handler: Handler = async (
   context: Context,
   callback: Callback,
 ) => {
+  const logger = new Logger('LambdaHandler');
+  
   // AWS Lambda context reuse optimization
   context.callbackWaitsForEmptyEventLoop = false;
 
+  // Log incoming request
+  logger.log(`Incoming request: ${event.requestContext?.http?.method || event.httpMethod} ${event.requestContext?.http?.path || event.path}`);
+  logger.debug(`Request ID: ${context.awsRequestId}`);
+
   const server = await bootstrapServer();
-  return server(event, context, callback);
+  const response = await server(event, context, callback);
+  
+  logger.log(`Response status: ${response?.statusCode || 'unknown'}`);
+  
+  return response;
 };
