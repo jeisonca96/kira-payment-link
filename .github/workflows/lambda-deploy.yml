@@ -179,7 +179,7 @@ jobs:
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --environment "Variables={
               NODE_ENV=production,
-              PORT=3000,
+              API_PORT=3000,
               API_BASE_URL=${{ secrets.API_BASE_URL }},
               CHECKOUT_BASE_URL=${{ secrets.CHECKOUT_BASE_URL }},
               DATABASES_MONGO_URL=${{ secrets.DATABASES_MONGO_URL }},
