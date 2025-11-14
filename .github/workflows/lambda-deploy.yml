@@ -248,9 +248,9 @@ jobs:
         run: |
           sleep 5
           API_URL="${{ steps.get-url.outputs.api_url }}"
-          echo "Testing: $API_URL/health"
+          echo "Testing: $API_URL/v1/health"
 
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health")
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/v1/health")
 
           if [ "$RESPONSE" = "200" ]; then
             echo "✅ Health endpoint OK (HTTP $RESPONSE)"

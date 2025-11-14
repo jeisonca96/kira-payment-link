@@ -268,7 +268,7 @@ These features are **explicitly excluded** from the 24-hour MVP. This is not tec
 - **Advanced Error Recovery:** Complex retry logic, circuit breakers → Simple failover only
 - **Rate Limiting:** API throttling → Rely on AWS Lambda concurrency limits
 - **Caching Layer:** Redis caching for link data → Direct database queries (acceptable for MVP load)
-- **Comprehensive Logging:** Structured logs with ELK stack → Basic CloudWatch logs
+- **Advanced Log Aggregation:** ELK stack for centralized logging → Basic CloudWatch logs with TraceID (✅ Implemented: TraceID middleware, request/response logging, async context tracking)
 - **Admin Dashboard:** Web UI for monitoring → AWS Console + API testing tools
 
 ---

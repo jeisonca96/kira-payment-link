@@ -15,7 +15,6 @@ const serverlessExpress = require('@codegenie/serverless-express');
 import { json } from 'express';
 const express = require('express');
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import { Environment } from './constants';
 
 let cachedServer: Handler;
@@ -101,24 +100,6 @@ function configureApp(
       }),
     );
   }
-
-  // Rate limiting - Lambda compatible
-  const limiter = rateLimit({
-    windowMs: appConfig.rateLimitWindow,
-    max: appConfig.rateLimitMax,
-    message: {
-      message: 'Too many requests, please try again later.',
-      code: 'TOO_MANY_REQUESTS',
-      details: 'Too many requests from this IP, please try again later.',
-      statusCode: 429,
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-    // Use a store compatible with Lambda (in-memory for single instance)
-    skipFailedRequests: false,
-    skipSuccessfulRequests: false,
-  });
-  app.use(limiter);
 
   // CORS configuration
   app.enableCors({

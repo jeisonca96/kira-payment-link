@@ -6,7 +6,6 @@ import { AppConfig } from './config/app.config';
 import { SwaggerModule } from '@nestjs/swagger';
 import { BuildApiDocs } from './apidocs';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import { Environment } from './constants';
 
 async function bootstrap() {
