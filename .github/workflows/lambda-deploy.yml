@@ -75,14 +75,47 @@ jobs:
         working-directory: ./api
         run: |
           rm -rf node_modules
-          npm ci --production
+          npm ci --production --omit=dev
+
+          # Remove unused heavy dependencies
+          rm -rf node_modules/googleapis
+          rm -rf node_modules/google-auth-library
+          rm -rf node_modules/java-invoke-local
+          rm -rf node_modules/swagger-ui-dist
+
+      - name: Prune unnecessary files
+        working-directory: ./api
+        run: |
+          # Remove test files
+          find node_modules -type d \( -name "test" -o -name "tests" -o -name "__tests__" -o -name "coverage" \) -exec rm -rf {} + 2>/dev/null || true
+
+          # Remove documentation
+          find node_modules -type d \( -name "docs" -o -name "examples" -o -name ".github" \) -exec rm -rf {} + 2>/dev/null || true
+
+          # Remove source files
+          find node_modules -name "*.md" -delete 2>/dev/null || true
+          find node_modules -name "*.ts" ! -name "*.d.ts" -delete 2>/dev/null || true
+          find node_modules -name "*.map" -delete 2>/dev/null || true
+          find node_modules -name "LICENSE*" -delete 2>/dev/null || true
+          find node_modules -name "CHANGELOG*" -delete 2>/dev/null || true
 
       - name: Create deployment package
         working-directory: ./api
         run: |
           cd dist
           cp -r ../node_modules .
-          zip -r lambda.zip .
+
+          # Show size before zipping
+          echo "Package size before compression:"
+          du -sh .
+
+          # Create optimized zip
+          zip -r9 lambda.zip . -x "*.git*"
+
+          # Show final size
+          echo "Final ZIP size:"
+          ls -lh lambda.zip
+
           mv lambda.zip ..
 
       - name: Upload Lambda package
