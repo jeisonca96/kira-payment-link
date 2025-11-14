@@ -131,10 +131,15 @@ function configureApp(
   logger.log('Setting custom limit for JSON body parser', { limit });
   app.use(json({ limit }));
 
-  // Swagger documentation
-  const { config, route } = BuildApiDocs(appConfig.baseUrl);
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup(route, app, document);
+  // Swagger documentation - disabled in Lambda to reduce package size and cold start
+  if (process.env.ENABLE_SWAGGER === 'true') {
+    logger.log('Enabling Swagger documentation...');
+    const { config, route } = BuildApiDocs(appConfig.baseUrl);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup(route, app, document);
+  } else {
+    logger.log('Swagger documentation disabled in Lambda');
+  }
 }
 
 export const handler: Handler = async (
