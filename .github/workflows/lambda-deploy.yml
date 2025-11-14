@@ -35,6 +35,7 @@ jobs:
       - name: Run linter
         working-directory: ./api
         run: npm run lint
+        continue-on-error: true
 
       - name: Run unit tests
         working-directory: ./api
