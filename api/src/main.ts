@@ -71,21 +71,6 @@ async function bootstrap() {
     );
   }
 
-  // Rate limiting middleware
-  const limiter = rateLimit({
-    windowMs: appConfig.rateLimitWindow,
-    max: appConfig.rateLimitMax,
-    message: {
-      message: 'Too many requests, please try again later.',
-      code: 'TOO_MANY_REQUESTS',
-      details: 'Too many requests from this IP, please try again later.',
-      statusCode: 429,
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-  app.use(limiter);
-
   app.enableCors({
     origin: appConfig.corsOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',

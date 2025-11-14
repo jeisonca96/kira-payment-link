@@ -9,6 +9,10 @@ import { FxRateService } from './services/fx-rate.service';
 import { CacheService } from './services/cache.service';
 import { FeeProfileService } from './services/fee-profile.service';
 import { TransactionService } from './services/transaction.service';
+import { LedgerService } from './services/ledger.service';
+import { PspOrchestratorService } from './services/psp-orchestrator.service';
+import { StripeMockService } from './services/gateways/stripe-mock.service';
+import { AdyenMockService } from './services/gateways/adyen-mock.service';
 import { PaymentLink, PaymentLinkSchema } from './schemas/payment-link.schema';
 import { FeeProfile, FeeProfileSchema } from './schemas/fee-profile.schema';
 import { Transaction, TransactionSchema } from './schemas/transaction.schema';
@@ -34,6 +38,10 @@ import { PercentageFeeRule } from './services/fee-engine/rules/percentage-fee.ru
     CacheService,
     FeeProfileService,
     TransactionService,
+    LedgerService,
+    PspOrchestratorService,
+    StripeMockService,
+    AdyenMockService,
     FixedFeeRule,
     PercentageFeeRule,
   ],

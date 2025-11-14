@@ -6,10 +6,25 @@ import {
   ApiResponse,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
+  ApiHeader,
+  ApiExtraModels,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { QuoteResponseDto } from '../dtos/quote-response.dto';
 import { GetQuoteDto } from '../dtos/get-quote.dto';
+import { ProcessPaymentDto } from '../dtos/process-payment.dto';
+import { TransactionResponseDto } from '../dtos/transaction-response.dto';
 import { ApiErrorResponseDto } from '../../core-services/exceptions/dtos/api-error-response.dto';
+import {
+  IdempotencyKeyMissingException,
+  PaymentLinkNotFoundException,
+  PaymentLinkNotActiveException,
+  CardDeclinedException,
+  PspGatewayException,
+  PspNetworkException,
+  PaymentProcessingFailedException,
+} from '../exceptions';
 
 export function ApiGetQuote() {
   return applyDecorators(
@@ -50,12 +65,161 @@ This endpoint should be called before payment to show the user a preview of char
       type: QuoteResponseDto,
     }),
     ApiBadRequestResponse({
-      description: 'Invalid payment link ID format',
+      description: 'Invalid payment link ID format or payment link not active',
       type: ApiErrorResponseDto,
+      examples: {
+        paymentLinkNotActive: {
+          summary: 'Payment link is not in ACTIVE status',
+          value: new PaymentLinkNotActiveException(
+            '655a1b2c3d4e5f6a7b8c9d0e',
+            'PAID',
+          ).getResponse(),
+        },
+      },
     }),
     ApiNotFoundResponse({
       description: 'Payment link not found',
       type: ApiErrorResponseDto,
+      examples: {
+        paymentLinkNotFound: {
+          summary: 'Payment link does not exist',
+          value: new PaymentLinkNotFoundException(
+            '655a1b2c3d4e5f6a7b8c9d0e',
+          ).getResponse(),
+        },
+      },
+    }),
+  );
+}
+
+export function ApiProcessPayment() {
+  return applyDecorators(
+    ApiExtraModels(ApiErrorResponseDto),
+    ApiOperation({
+      summary: 'Process payment with PSP orchestration and ACID ledger',
+      description: `
+Executes the payment using the PSP Orchestrator with automatic failover:
+
+**PSP Orchestration (Strategy Pattern):**
+1. **Primary Gateway:** Stripe Mock
+   - Simulates network latency (100-500ms)
+   - 10% random failure rate for resilience testing
+   - Supports different tokens for testing scenarios
+2. **Automatic Failover:** Adyen Mock
+   - Activated when Stripe fails or throws error
+   - 5% random failure rate (better reliability)
+   - Provides redundancy for high availability
+
+**ACID Transaction Guarantees:**
+- Uses MongoDB multi-document transactions
+- Atomically creates Transaction record AND updates PaymentLink status
+- Automatic rollback on any error
+- Ensures financial data integrity
+
+**Token Scenarios (for testing):**
+- \`tok_visa_success\`: Successful payment
+- \`tok_card_declined\`: Card declined by issuer
+- \`tok_network_error\`: Triggers network timeout
+- Any other token: 90% success / 10% random failure (Stripe)
+
+**Idempotency:**
+- Idempotency-Key header is **required** to prevent duplicate charges
+- Should be a unique UUID per payment attempt
+
+**Error Codes:**
+- \`IDEMPOTENCY_KEY_MISSING\`: Missing required Idempotency-Key header
+- \`PAYMENT_LINK_NOT_FOUND\`: Payment link does not exist or invalid ID
+- \`PAYMENT_LINK_NOT_ACTIVE\`: Payment link is not in ACTIVE status
+- \`CARD_DECLINED\`: Card was declined by the issuing bank
+- \`PSP_GATEWAY_ERROR\`: Payment gateway returned an error
+- \`PSP_NETWORK_ERROR\`: Network error communicating with PSP
+- \`PAYMENT_PROCESSING_FAILED\`: All payment providers failed
+      `.trim(),
+    }),
+    ApiParam({
+      name: 'linkId',
+      description: 'Payment link unique identifier (MongoDB ObjectId)',
+      example: '655a1b2c3d4e5f6a7b8c9d0e',
+      type: String,
+    }),
+    ApiHeader({
+      name: 'Idempotency-Key',
+      description:
+        'Unique identifier to ensure idempotent payment processing (UUID)',
+      required: true,
+      example: '550e8400-e29b-41d4-a716-446655440000',
+    }),
+    ApiBody({
+      type: ProcessPaymentDto,
+      description: 'Payment details including PSP token and customer email',
+    }),
+    ApiResponse({
+      status: 200,
+      description: 'Payment processed successfully',
+      type: TransactionResponseDto,
+    }),
+    ApiBadRequestResponse({
+      description:
+        'Bad Request - Invalid input, missing idempotency key, payment link not active, card declined, gateway error, or payment processing failed',
+      type: ApiErrorResponseDto,
+      examples: {
+        idempotencyKeyMissing: {
+          summary: 'Missing required Idempotency-Key header',
+          value: new IdempotencyKeyMissingException().getResponse(),
+        },
+        paymentLinkNotActive: {
+          summary: 'Payment link is not in ACTIVE status',
+          value: new PaymentLinkNotActiveException(
+            '655a1b2c3d4e5f6a7b8c9d0e',
+            'PAID',
+          ).getResponse(),
+        },
+        cardDeclined: {
+          summary: 'Card was declined by issuing bank',
+          value: new CardDeclinedException().getResponse(),
+        },
+        pspGatewayError: {
+          summary: 'Payment gateway returned an error',
+          value: new PspGatewayException(
+            'STRIPE',
+            'DECLINED',
+            'Your card was declined',
+          ).getResponse(),
+        },
+        paymentProcessingFailed: {
+          summary: 'All payment providers failed',
+          value: new PaymentProcessingFailedException(
+            'STRIPE network timeout',
+            'ADYEN network timeout',
+          ).getResponse(),
+        },
+      },
+    }),
+    ApiNotFoundResponse({
+      description: 'Payment link not found',
+      type: ApiErrorResponseDto,
+      examples: {
+        paymentLinkNotFound: {
+          summary: 'Payment link does not exist',
+          value: new PaymentLinkNotFoundException(
+            '655a1b2c3d4e5f6a7b8c9d0e',
+          ).getResponse(),
+        },
+      },
+    }),
+    ApiServiceUnavailableResponse({
+      description:
+        'Payment service provider temporarily unavailable (triggers automatic failover to secondary gateway)',
+      type: ApiErrorResponseDto,
+      examples: {
+        pspNetworkError: {
+          summary: 'PSP network error or service unavailable',
+          value: new PspNetworkException(
+            'STRIPE',
+            'Connection timeout',
+          ).getResponse(),
+        },
+      },
     }),
   );
 }
