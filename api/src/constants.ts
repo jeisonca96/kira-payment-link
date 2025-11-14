@@ -7,9 +7,12 @@ export enum Environment {
 
 export enum ApiTagsEnum {
   Merchant = 'merchant',
+  Checkout = 'checkout',
 }
 
 export const ApiDescriptions: Record<ApiTagsEnum, string> = {
   [ApiTagsEnum.Merchant]:
     'Endpoints for merchants to create and manage payment links',
+  [ApiTagsEnum.Checkout]:
+    'Endpoints for payers to get quotes and process payments',
 };
